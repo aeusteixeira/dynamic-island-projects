@@ -47,6 +47,24 @@ C:\Projetos\
 
 ## 🚀 Instalação
 
+### Com Claude Code (recomendado — instala tudo sozinho)
+
+```bash
+git clone https://github.com/aeusteixeira/dynamic-island-projects.git
+cd dynamic-island-projects
+claude
+```
+
+E dentro do Claude Code, digite:
+
+```
+/install
+```
+
+O Claude verifica os pré-requisitos, instala as dependências, builda o executável, configura os hooks de status no seu `~/.claude/settings.json` (com merge seguro), pergunta se você quer iniciar com o Windows e já deixa a ilha rodando.
+
+### Manual
+
 ```bash
 git clone https://github.com/aeusteixeira/dynamic-island-projects.git
 cd dynamic-island-projects
