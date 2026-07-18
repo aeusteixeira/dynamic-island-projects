@@ -49,6 +49,31 @@
     font-size: 12.5px; font-weight: 600; letter-spacing: 0.3px; color: #cfcfda;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  #pill-label.tick { animation: tickfade 0.45s ease; }
+  @keyframes tickfade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- peek (prévia no hover) ---------- */
+  #peek {
+    position: relative;
+    display: none;
+    margin-top: 0;
+    width: calc(100% - 28px);
+    max-height: calc(100% - 8px);
+    background: rgba(12, 12, 16, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-top: none;
+    border-radius: 0 0 20px 20px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55);
+    transform-origin: 50% 0;
+    animation: toast-pop 0.25s cubic-bezier(0.34, 1.4, 0.64, 1);
+    overflow: hidden;
+    padding: 8px 10px 10px;
+  }
+  #peek .fillet.l { left: -12px; background: radial-gradient(circle at 0 100%, rgba(0, 0, 0, 0) 11.5px, rgba(12, 12, 16, 0.97) 12px); }
+  #peek .fillet.r { right: -12px; background: radial-gradient(circle at 100% 100%, rgba(0, 0, 0, 0) 11.5px, rgba(12, 12, 16, 0.97) 12px); }
+  body.peeking #pill, body.peeking #toast { display: none; }
+  body.peeking #peek { display: block; }
+  .b-stuck { color: #ff6b6b; font-weight: 800; font-size: 12px; animation: cpulse 1.2s infinite; }
 
   /* ---------- toast "terminou" ---------- */
   #toast {
@@ -148,7 +173,7 @@
   }
   #search:focus { border-color: rgba(124, 92, 255, 0.6); }
   #search::placeholder { color: #6b6b78; }
-  #gear {
+  #gear, #journal-btn {
     flex: none;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -159,7 +184,8 @@
     cursor: pointer;
     transition: color 0.12s ease, border-color 0.12s ease;
   }
-  #gear:hover, #gear.on { color: #cfcfda; border-color: rgba(124, 92, 255, 0.5); }
+  #gear:hover, #gear.on, #journal-btn:hover, #journal-btn.on { color: #cfcfda; border-color: rgba(124, 92, 255, 0.5); }
+  .j-time { flex: none; font-size: 11px; font-weight: 700; color: #8a8a98; width: 44px; }
 
   /* ---------- settings ---------- */
   #settings {
@@ -309,7 +335,12 @@
     <i class="fillet l"></i><i class="fillet r"></i>
     <span class="t-check">✓</span>
     <span id="toast-name"></span>
-    <span class="t-sub">terminou · clique para abrir</span>
+    <span class="t-sub" id="toast-sub">terminou · clique para abrir</span>
+  </div>
+
+  <div id="peek">
+    <i class="fillet l"></i><i class="fillet r"></i>
+    <div id="peek-list"></div>
   </div>
 
   <div id="panel">
@@ -317,6 +348,7 @@
     <div id="panel-clip">
       <div id="search-wrap">
         <input id="search" type="text" placeholder="Buscar projeto ou colar URL de repositório…" spellcheck="false" />
+        <button id="journal-btn" title="Diário do dia">📜</button>
         <button id="gear" title="Configurações">⚙</button>
       </div>
       <div id="settings">
@@ -363,6 +395,9 @@
   let visible = [];
   let selIdx = -1;
   let toastData = null;
+  let journalMode = false;
+  let tickIdx = 0;
+  const STUCK_MS = 10 * 60 * 1000;
 
   const pill = document.getElementById('pill');
   const pillLabel = document.getElementById('pill-label');
@@ -442,6 +477,9 @@
 
   function badgeHtml(st) {
     if (st.state === 'working') {
+      if (Date.now() - (st.ts || 0) > STUCK_MS) {
+        return `<span class="b-stuck" title="sem atividade">⚠</span><span class="el">parado ${fmtElapsed(st.ts)}</span>`;
+      }
       const el = fmtElapsed(st.startTs);
       return `<span class="b-work"><i></i><i></i><i></i></span>${el ? `<span class="el">${el}</span>` : ''}`;
     }
@@ -522,7 +560,39 @@
     visible.push({ el, action: fn });
   }
 
+  async function renderJournal() {
+    const entries = await window.api.getJournal();
+    const today = new Date().toDateString();
+    const todays = entries.filter((e) => new Date(e.ts).toDateString() === today).reverse();
+    list.innerHTML = '';
+    visible = [];
+    selIdx = -1;
+    header(`Diário de hoje`, '#3ddc97', todays.length ? `${todays.length} concluída${todays.length > 1 ? 's' : ''}` : '');
+    for (const e of todays) {
+      const d = new Date(e.ts);
+      const hh = `${String(d.getHours()).padStart(2, '0')}h${String(d.getMinutes()).padStart(2, '0')}`;
+      const durM = Math.floor((e.durMs || 0) / 60000);
+      const dur = durM >= 1 ? (durM < 60 ? `${durM}min` : `${Math.floor(durM / 60)}h${durM % 60 ? (durM % 60) + 'm' : ''}`) : '';
+      const el = document.createElement('div');
+      el.className = 'item';
+      el.title = e.cwd;
+      el.innerHTML =
+        `<span class="j-time">${hh}</span>` +
+        `<div class="col"><div class="nrow"><span class="name">${esc(e.name)}</span>${dur ? `<span class="el">${dur}</span>` : ''}</div>` +
+        (e.summary ? `<div class="sub" title="${esc(e.summary)}">${esc(e.summary)}</div>` : '') +
+        `</div><div class="hint">abrir</div>`;
+      el.addEventListener('click', () => window.api.openProject(e.cwd));
+      list.appendChild(el);
+      visible.push({ el, path: e.cwd });
+    }
+    empty.style.display = todays.length ? 'none' : 'block';
+  }
+
   function render() {
+    if (journalMode) {
+      renderJournal();
+      return;
+    }
     const raw = search.value.trim();
     const q = raw.toLowerCase();
     const isUrl = /^(https?:\/\/|git@)/i.test(raw);
@@ -647,15 +717,31 @@
     }
   }
 
+  function pillText() {
+    const active = statuses.filter((s) => s.state === 'working' || s.state === 'waiting');
+    if (!active.length) {
+      return statuses.length === 1 ? displayNameFor(statuses[0].cwd) : 'Projetos';
+    }
+    // ticker: alterna entre as sessões ativas mostrando a atividade ao vivo
+    const s = active[tickIdx % active.length];
+    const stuck = s.state === 'working' && Date.now() - (s.ts || 0) > STUCK_MS;
+    const flag = s.state === 'waiting' ? '❓ ' : stuck ? '⚠ ' : '';
+    const act = s.state === 'waiting' ? (s.detail || 'esperando você') : stuck ? 'sem atividade' : (s.detail || 'trabalhando');
+    return `${flag}${displayNameFor(s.cwd)} · ${act}`;
+  }
+
   function updatePill() {
     const working = statuses.filter((s) => s.state === 'working').length;
     const waiting = statuses.filter((s) => s.state === 'waiting').length;
     const done = statuses.filter((s) => s.state === 'done').length;
 
-    // mini-status: uma única sessão ativa mostra o nome do projeto na pílula
-    const active = statuses.filter((s) => s.state === 'working' || s.state === 'waiting');
-    pillLabel.textContent =
-      statuses.length === 1 && active.length === 1 ? displayNameFor(statuses[0].cwd) : 'Projetos';
+    const txt = pillText();
+    if (pillLabel.textContent !== txt) {
+      pillLabel.textContent = txt;
+      pillLabel.classList.remove('tick');
+      void pillLabel.offsetWidth; // reinicia a animação
+      pillLabel.classList.add('tick');
+    }
 
     let html = '';
     if (working) html += `<span class="b-work"><i></i><i></i><i></i></span>${working > 1 ? `<span class="cnt o">${working}</span>` : ''}`;
@@ -707,6 +793,17 @@
     settingsEl.classList.toggle('show');
     gear.classList.toggle('on', settingsEl.classList.contains('show'));
   });
+
+  const journalBtn = document.getElementById('journal-btn');
+  journalBtn.addEventListener('click', () => {
+    journalMode = !journalMode;
+    journalBtn.classList.toggle('on', journalMode);
+    render();
+    if (!journalMode) search.focus();
+  });
+  window.api.onJournalUpdated(() => {
+    if (journalMode && document.body.classList.contains('expanded')) render();
+  });
   document.getElementById('set-sounds').addEventListener('change', async (e) => {
     config = await window.api.setSetting({ sounds: e.target.checked });
   });
@@ -717,12 +814,52 @@
     config = await window.api.setSetting({ displayId: parseInt(e.target.value, 10) });
   });
 
-  pill.addEventListener('click', () => window.api.setMode(true));
+  pill.addEventListener('click', () => {
+    clearTimeout(peekTimer);
+    window.api.setMode(true);
+  });
 
   toastEl.addEventListener('click', () => {
     if (!toastData) return;
     window.api.ackSession(toastData.sessionId);
     window.api.openProject(toastData.cwd);
+  });
+
+  // ---------- peek no hover ----------
+  const peekEl = document.getElementById('peek');
+  const peekList = document.getElementById('peek-list');
+  let peekTimer = null;
+
+  function renderPeek() {
+    peekList.innerHTML = '';
+    statuses.forEach((s) => {
+      const el = document.createElement('div');
+      el.className = 'item ' + (s.state === 'done' ? 'cc-done' : 'cc-active');
+      el.title = s.cwd;
+      const sub = subFor(s);
+      el.innerHTML =
+        `<div class="cdot" style="background:${CC_COLOR}"></div>` +
+        `<div class="col"><div class="nrow"><span class="name">${esc(displayNameFor(s.cwd))}</span></div>` +
+        (sub ? `<div class="sub" title="${esc(sub)}">${esc(sub)}</div>` : '') +
+        `</div><div class="badge">${badgeHtml(s)}</div>`;
+      el.addEventListener('click', () => openStatus(s));
+      peekList.appendChild(el);
+    });
+  }
+
+  pill.addEventListener('mouseenter', () => {
+    if (!statuses.length) return;
+    clearTimeout(peekTimer);
+    peekTimer = setTimeout(() => {
+      const h = 24 + statuses.length * 58;
+      window.api.setPeek({ on: true, height: Math.min(h, 340) });
+    }, 350);
+  });
+  pill.addEventListener('mouseleave', () => clearTimeout(peekTimer));
+  peekEl.addEventListener('mouseleave', () => window.api.setPeek({ on: false }));
+  window.api.onPeek((v) => {
+    document.body.classList.toggle('peeking', !!v);
+    if (v) renderPeek();
   });
 
   search.addEventListener('input', render);
@@ -749,6 +886,8 @@
       search.value = '';
       settingsEl.classList.remove('show');
       gear.classList.remove('on');
+      journalMode = false;
+      journalBtn.classList.remove('on');
       render();
       search.focus();
       load(); // re-escaneia em segundo plano a cada abertura
@@ -793,13 +932,22 @@
   window.api.onToast((t) => {
     toastData = t;
     document.body.classList.toggle('toasting', !!t);
-    if (t) document.getElementById('toast-name').textContent = t.name;
+    if (t) {
+      document.getElementById('toast-name').textContent = t.name;
+      document.getElementById('toast-sub').textContent =
+        `terminou${t.dur ? ` em ${t.dur}` : ''} · clique para abrir`;
+    }
   });
+
+  // ticker da gota alterna entre as sessões ativas
+  setInterval(() => {
+    tickIdx++;
+    updatePill();
+  }, 4000);
 
   // tempos decorridos ("12min") atualizam sozinhos
   setInterval(() => {
     if (document.body.classList.contains('expanded')) render();
-    updatePill();
   }, 30000);
 
   load();

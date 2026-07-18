@@ -13,6 +13,7 @@ const DATA_DIR = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'notch-bar')
 const STATUS_DIR = path.join(DATA_DIR, 'status');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
+const JOURNAL_FILE = path.join(DATA_DIR, 'journal.jsonl');
 const STATUS_STALE_MS = 12 * 60 * 60 * 1000;
 const GIT_CACHE_MS = 60 * 1000;
 
@@ -24,6 +25,7 @@ let win = null;
 let tray = null;
 let expanded = false;
 let toastTimer = null;
+let peeking = false;
 let hiddenByFullscreen = false;
 let icons = {};
 let config = { favorites: [], recents: [], settings: {} };
@@ -78,6 +80,39 @@ function saveStats() {
   } catch {}
 }
 
+function fmtDur(ms) {
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return null;
+  if (m < 60) return `${m}min`;
+  return `${Math.floor(m / 60)}h${m % 60 ? (m % 60) + 'm' : ''}`;
+}
+
+function appendJournal(entry) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.appendFileSync(JOURNAL_FILE, JSON.stringify(entry) + '\n');
+  } catch {}
+}
+
+function readJournal(limit = 200) {
+  try {
+    const lines = fs.readFileSync(JOURNAL_FILE, 'utf8').trim().split('\n');
+    // mantém o arquivo enxuto
+    if (lines.length > 800) {
+      fs.writeFileSync(JOURNAL_FILE, lines.slice(-500).join('\n') + '\n');
+    }
+    const out = [];
+    for (const l of lines.slice(-limit)) {
+      try {
+        out.push(JSON.parse(l));
+      } catch {}
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 function bumpStat(name) {
   const t = todayKey();
   stats[t] = stats[t] || {};
@@ -109,6 +144,8 @@ function centerBounds(size) {
 function setExpanded(v) {
   if (!win) return;
   expanded = v;
+  peeking = false;
+  send('peek', false);
   clearTimeout(toastTimer);
   send('toast', null);
   win.setBounds(centerBounds(v ? EXPANDED : COLLAPSED));
@@ -218,8 +255,9 @@ function notifyStatus(s) {
   const name = projectNameFor(s.cwd);
   let n;
   if (s.state === 'done') {
+    const dur = s.startTs ? fmtDur(Date.now() - s.startTs) : null;
     n = new Notification({
-      title: `✓ ${name} — Claude terminou`,
+      title: `✓ ${name} — terminou${dur ? ` em ${dur}` : ''}`,
       body: s.summary || 'Clique para abrir no VS Code',
     });
     n.on('click', () => {
@@ -237,10 +275,15 @@ function notifyStatus(s) {
 }
 
 function showToast(s) {
-  if (expanded || !win) return;
+  if (expanded || peeking || !win) return;
   clearTimeout(toastTimer);
   win.setBounds(centerBounds(TOAST));
-  send('toast', { name: projectNameFor(s.cwd), cwd: s.cwd, sessionId: s.sessionId });
+  send('toast', {
+    name: projectNameFor(s.cwd),
+    cwd: s.cwd,
+    sessionId: s.sessionId,
+    dur: s.startTs ? fmtDur(Date.now() - s.startTs) : null,
+  });
   toastTimer = setTimeout(() => {
     send('toast', null);
     if (!expanded) win.setBounds(centerBounds(COLLAPSED));
@@ -273,6 +316,14 @@ function handleStatusChanges(statuses) {
           notifyStatus(s);
           showToast(s);
           bumpStat(projectNameFor(s.cwd));
+          appendJournal({
+            ts: Date.now(),
+            name: projectNameFor(s.cwd),
+            cwd: s.cwd,
+            summary: s.summary || '',
+            durMs: s.startTs ? Date.now() - s.startTs : 0,
+          });
+          send('journal-updated', null);
           if (config.settings.sounds !== false) send('chime', 'done');
         } else if (s.state === 'waiting') {
           notifyStatus(s);
@@ -649,6 +700,21 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('create-project', (_e, { category, name }) => createProject(category, name));
   ipcMain.handle('clone-repo', (_e, { url, category }) => cloneRepo(url, category));
+  ipcMain.handle('get-journal', () => readJournal());
+  ipcMain.on('set-peek', (_e, opts) => {
+    if (expanded || !win) return;
+    const on = !!(opts && opts.on);
+    if (on === peeking) return;
+    peeking = on;
+    if (on) {
+      const h = Math.min((opts && opts.height) || 200, 340);
+      win.setBounds(centerBounds({ width: 430, height: h }));
+      send('peek', true);
+    } else {
+      send('peek', false);
+      win.setBounds(centerBounds(COLLAPSED));
+    }
+  });
   ipcMain.on('open-project', (_e, p) => openInVSCode(p));
   ipcMain.on('set-mode', (_e, v) => setExpanded(!!v));
   ipcMain.on('ack-session', (_e, id) => ackSession(id));
