@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Notch Bar</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+  html, body { height: 100%; background: transparent; overflow: hidden; }
+  body {
+    font-family: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+    color: #e8e8ee;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  /* ---------- pílula/gota (colapsado) — colada no topo, estilo notch ---------- */
+  .fillet {
+    position: absolute; top: 0; width: 12px; height: 12px; pointer-events: none;
+  }
+  #pill {
+    position: relative;
+    margin-top: 0;
+    height: 38px;
+    max-width: 96%;
+    padding: 2px 20px 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    background: rgba(10, 10, 13, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: none;
+    border-radius: 0 0 19px 19px;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    transform-origin: 50% 0;
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.15s ease;
+  }
+  #pill:hover { transform: scaleX(1.06) scaleY(1.1); border-color: rgba(124, 92, 255, 0.55); }
+  #pill .fillet.l { left: -12px; background: radial-gradient(circle at 0 100%, rgba(0, 0, 0, 0) 11.5px, rgba(10, 10, 13, 0.96) 12px); }
+  #pill .fillet.r { right: -12px; background: radial-gradient(circle at 100% 100%, rgba(0, 0, 0, 0) 11.5px, rgba(10, 10, 13, 0.96) 12px); }
+  #pill .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #7c5cff;
+    box-shadow: 0 0 8px #7c5cff;
+    flex: none;
+  }
+  #pill-label {
+    font-size: 12.5px; font-weight: 600; letter-spacing: 0.3px; color: #cfcfda;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ---------- toast "terminou" ---------- */
+  #toast {
+    position: relative;
+    display: none;
+    margin-top: 0;
+    height: 38px;
+    max-width: 96%;
+    padding: 2px 22px 0;
+    align-items: center;
+    gap: 10px;
+    background: rgba(11, 18, 14, 0.97);
+    border: 1px solid rgba(61, 220, 151, 0.55);
+    border-top: none;
+    border-radius: 0 0 19px 19px;
+    cursor: pointer;
+    box-shadow: 0 6px 24px rgba(61, 220, 151, 0.25);
+    transform-origin: 50% 0;
+    animation: toast-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  #toast .fillet.l { left: -12px; background: radial-gradient(circle at 0 100%, rgba(0, 0, 0, 0) 11.5px, rgba(11, 18, 14, 0.97) 12px); }
+  #toast .fillet.r { right: -12px; background: radial-gradient(circle at 100% 100%, rgba(0, 0, 0, 0) 11.5px, rgba(11, 18, 14, 0.97) 12px); }
+  body.toasting #pill { display: none; }
+  body.toasting #toast { display: flex; }
+  @keyframes toast-pop {
+    from { transform: scaleX(0.5) scaleY(0.4); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  #toast .t-check { color: #3ddc97; font-weight: 800; font-size: 14px; flex: none; }
+  #toast #toast-name {
+    font-size: 12.5px; font-weight: 700; color: #eafff5;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #toast .t-sub { font-size: 11px; color: #7fbfa4; white-space: nowrap; flex: none; }
+
+  /* ---------- badges de status do Claude ---------- */
+  .b-work { display: inline-flex; gap: 3px; align-items: center; }
+  .b-work i {
+    width: 4.5px; height: 4.5px; border-radius: 50%;
+    background: #d97757;
+    animation: cblink 1.2s infinite;
+  }
+  .b-work i:nth-child(2) { animation-delay: 0.2s; }
+  .b-work i:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes cblink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+  .b-done { color: #3ddc97; font-weight: 800; font-size: 12px; }
+  .b-wait { color: #ffb454; font-weight: 800; font-size: 12px; animation: cpulse 1s infinite; }
+  @keyframes cpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  #pill-status { display: flex; align-items: center; gap: 8px; flex: none; }
+  #pill-status .cnt { font-size: 11px; font-weight: 700; margin-left: 2px; }
+  #pill-status .cnt.g { color: #3ddc97; }
+  #pill-status .cnt.o { color: #d97757; }
+  .el { font-size: 10px; color: #9a8a84; margin-left: 6px; font-weight: 600; }
+
+  /* ---------- painel (expandido) — a gota "derrete" e cresce a partir do topo ---------- */
+  #panel {
+    position: relative;
+    display: none;
+    margin-top: 0;
+    width: calc(100% - 32px);
+    height: calc(100% - 10px);
+    background: rgba(14, 14, 19, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-top: none;
+    border-radius: 0 0 24px 24px;
+    box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
+    flex-direction: column;
+    overflow: visible;
+    opacity: 0;
+    transform-origin: 50% 0;
+    transform: scaleX(0.55) scaleY(0.12);
+    transition: opacity 0.18s ease, transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  #panel .fillet { width: 14px; height: 14px; }
+  #panel .fillet.l { left: -14px; background: radial-gradient(circle at 0 100%, rgba(0, 0, 0, 0) 13.5px, rgba(14, 14, 19, 0.97) 14px); }
+  #panel .fillet.r { right: -14px; background: radial-gradient(circle at 100% 100%, rgba(0, 0, 0, 0) 13.5px, rgba(14, 14, 19, 0.97) 14px); }
+  #panel-clip {
+    display: flex; flex-direction: column;
+    width: 100%; height: 100%;
+    overflow: hidden;
+    border-radius: 0 0 24px 24px;
+  }
+  body.expanded #pill, body.expanded #toast { display: none; }
+  body.expanded #panel { display: flex; }
+  body.expanded.in #panel { opacity: 1; transform: scale(1); }
+
+  #search-wrap { padding: 14px 16px 10px; display: flex; gap: 8px; align-items: center; }
+  #search {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 9px 14px;
+    color: #eee;
+    font-size: 13.5px;
+    outline: none;
+  }
+  #search:focus { border-color: rgba(124, 92, 255, 0.6); }
+  #search::placeholder { color: #6b6b78; }
+  #gear {
+    flex: none;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    width: 38px; height: 38px;
+    color: #8a8a98;
+    font-size: 16px;
+    cursor: pointer;
+    transition: color 0.12s ease, border-color 0.12s ease;
+  }
+  #gear:hover, #gear.on { color: #cfcfda; border-color: rgba(124, 92, 255, 0.5); }
+
+  /* ---------- settings ---------- */
+  #settings {
+    display: none;
+    padding: 4px 16px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  #settings.show { display: block; }
+  .set-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 2px;
+    font-size: 12.5px; color: #b8b8c4;
+  }
+  .set-row select {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    color: #ddd;
+    font-size: 12px;
+    padding: 4px 8px;
+    outline: none;
+  }
+  .set-row select option { background: #1a1a22; }
+  .switch { position: relative; width: 36px; height: 20px; flex: none; cursor: pointer; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .sl {
+    position: absolute; inset: 0;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    transition: background 0.15s ease;
+  }
+  .switch .sl::before {
+    content: ''; position: absolute;
+    width: 14px; height: 14px; border-radius: 50%;
+    left: 3px; top: 3px;
+    background: #aaa;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .switch input:checked + .sl { background: rgba(124, 92, 255, 0.55); }
+  .switch input:checked + .sl::before { transform: translateX(16px); background: #fff; }
+
+  #list { flex: 1; overflow-y: auto; padding: 0 14px 14px; }
+  #list::-webkit-scrollbar { width: 6px; }
+  #list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+  .cat-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 16px 10px 7px;
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.2px;
+    color: #8a8a98;
+  }
+  .cat-header .cdot { width: 7px; height: 7px; border-radius: 50%; }
+  .cat-header .hcount { font-weight: 600; text-transform: none; letter-spacing: 0.3px; color: #6f6f7e; }
+
+  .item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 9px 14px;
+    margin-bottom: 3px;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .item:hover, .item.sel {
+    background: rgba(124, 92, 255, 0.13);
+    border-color: rgba(124, 92, 255, 0.35);
+  }
+  .item .cdot { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+  .item .col { flex: 1; min-width: 0; }
+  .item .nrow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .item .name {
+    font-size: 13.5px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .item .branch {
+    flex: none;
+    font-size: 10px; font-weight: 600;
+    color: #7d7d8c;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 1.5px 7px;
+    max-width: 110px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .item .prb {
+    flex: none;
+    font-size: 10px; font-weight: 700;
+    color: #c792ea;
+    background: rgba(199, 146, 234, 0.12);
+    border: 1px solid rgba(199, 146, 234, 0.3);
+    border-radius: 6px;
+    padding: 1px 6px;
+    white-space: nowrap;
+  }
+  .item .dirty {
+    flex: none; width: 6px; height: 6px; border-radius: 50%;
+    background: #ffb454; box-shadow: 0 0 5px rgba(255, 180, 84, 0.7);
+  }
+  .item .vsopen {
+    flex: none; width: 6px; height: 6px; border-radius: 50%;
+    background: #3fb6ff; box-shadow: 0 0 5px rgba(63, 182, 255, 0.7);
+  }
+  .item .sub {
+    margin-top: 2px;
+    font-size: 11px; color: #8a8a98;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .item.cc-active .sub { color: #b08a7a; }
+  .item .star {
+    flex: none;
+    background: none; border: none; cursor: pointer;
+    font-size: 14px; line-height: 1;
+    color: #5d5d6a;
+    padding: 3px 5px;
+    opacity: 0;
+    transition: opacity 0.12s ease, color 0.12s ease;
+  }
+  .item:hover .star, .item.sel .star { opacity: 1; }
+  .item .star:hover { color: #ffd76a; }
+  .item .star.on { opacity: 1; color: #ffd76a; }
+  .item .hint { flex: none; padding-left: 6px; font-size: 10.5px; color: #6b6b78; }
+  .item.sel .hint::after { content: ' ⏎'; color: #a08cff; }
+  .item .badge { flex: none; padding-left: 6px; padding-right: 3px; display: flex; align-items: center; }
+  .item.cc-active { border-color: rgba(217, 119, 87, 0.4); background: rgba(217, 119, 87, 0.07); }
+  .item.cc-done { border-color: rgba(61, 220, 151, 0.45); background: rgba(61, 220, 151, 0.08); }
+  .item.action .name { color: #b8a8ff; font-weight: 600; }
+
+  #empty { padding: 30px; text-align: center; color: #6b6b78; font-size: 13px; display: none; }
+
+  #footer {
+    padding: 8px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    font-size: 10.5px; color: #5d5d6a;
+    display: flex; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+  <div id="pill" title="Abrir projetos (Ctrl+Alt+P)">
+    <i class="fillet l"></i><i class="fillet r"></i>
+    <div class="dot"></div>
+    <span id="pill-label">Projetos</span>
+    <div id="pill-status"></div>
+  </div>
+
+  <div id="toast">
+    <i class="fillet l"></i><i class="fillet r"></i>
+    <span class="t-check">✓</span>
+    <span id="toast-name"></span>
+    <span class="t-sub">terminou · clique para abrir</span>
+  </div>
+
+  <div id="panel">
+    <i class="fillet l"></i><i class="fillet r"></i>
+    <div id="panel-clip">
+      <div id="search-wrap">
+        <input id="search" type="text" placeholder="Buscar projeto ou colar URL de repositório…" spellcheck="false" />
+        <button id="gear" title="Configurações">⚙</button>
+      </div>
+      <div id="settings">
+        <div class="set-row">
+          <span>Sons de notificação</span>
+          <label class="switch"><input id="set-sounds" type="checkbox" /><span class="sl"></span></label>
+        </div>
+        <div class="set-row">
+          <span>Duração do toast</span>
+          <select id="set-toast">
+            <option value="2000">2s</option>
+            <option value="4000">4s</option>
+            <option value="6000">6s</option>
+            <option value="8000">8s</option>
+          </select>
+        </div>
+        <div class="set-row">
+          <span>Monitor da gota</span>
+          <select id="set-display"></select>
+        </div>
+        <div class="set-row" style="color:#6f6f7e; font-size:11px;">
+          <span>Atalhos: Ctrl+Alt+P abre · Ctrl+Alt+1..9 abrem favoritos</span>
+        </div>
+      </div>
+      <div id="list"></div>
+      <div id="empty">Nenhum projeto encontrado</div>
+      <div id="footer">
+        <span>↑↓ navegar · Enter abrir · botão direito = mais ações</span>
+        <span>Esc fechar</span>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const COLORS = ['#7c5cff', '#3fb6ff', '#3ddc97', '#ffb454', '#ff6b8b', '#c792ea'];
+  const CC_COLOR = '#d97757';
+  let categories = [];
+  let statuses = [];
+  let config = { favorites: [], recents: [], settings: {} };
+  let gitInfo = {};
+  let vscodeOpen = [];
+  let prInfo = {};
+  let todayStats = {};
+  let visible = [];
+  let selIdx = -1;
+  let toastData = null;
+
+  const pill = document.getElementById('pill');
+  const pillLabel = document.getElementById('pill-label');
+  const pillStatus = document.getElementById('pill-status');
+  const toastEl = document.getElementById('toast');
+  const list = document.getElementById('list');
+  const empty = document.getElementById('empty');
+  const search = document.getElementById('search');
+  const gear = document.getElementById('gear');
+  const settingsEl = document.getElementById('settings');
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const basename = (p) => (p || '').split('\\').filter(Boolean).pop() || p;
+
+  async function load() {
+    [categories, statuses, config, vscodeOpen, prInfo, todayStats] = await Promise.all([
+      window.api.getProjects(),
+      window.api.getClaudeStatus(),
+      window.api.getConfig(),
+      window.api.getVscodeOpen(),
+      window.api.getPrStatus(),
+      window.api.getStats(),
+    ]);
+    syncSettingsUI();
+    render();
+    updatePill();
+  }
+
+  function isOpenInVSCode(name) {
+    return vscodeOpen.includes((name || '').toLowerCase());
+  }
+
+  function projectByPath(p) {
+    const pl = (p || '').toLowerCase();
+    for (const cat of categories) {
+      for (const pr of cat.projects) {
+        if (pr.path.toLowerCase() === pl) return pr;
+      }
+    }
+    return null;
+  }
+
+  function colorFor(p) {
+    const pl = (p || '').toLowerCase();
+    const i = categories.findIndex(
+      (c) => pl === c.path.toLowerCase() || pl.startsWith(c.path.toLowerCase() + '\\')
+    );
+    return i >= 0 ? COLORS[i % COLORS.length] : '#8a8a98';
+  }
+
+  function displayNameFor(cwd) {
+    const cl = (cwd || '').toLowerCase();
+    for (const cat of categories) {
+      for (const p of cat.projects) {
+        const pl = p.path.toLowerCase();
+        if (cl === pl || cl.startsWith(pl + '\\')) return p.name;
+      }
+    }
+    return basename(cwd);
+  }
+
+  function statusForPath(p) {
+    const pl = (p || '').toLowerCase();
+    return statuses.find((s) => {
+      const c = (s.cwd || '').toLowerCase();
+      return c === pl || c.startsWith(pl + '\\');
+    });
+  }
+
+  function fmtElapsed(startTs) {
+    if (!startTs) return '';
+    const m = Math.floor((Date.now() - startTs) / 60000);
+    if (m < 1) return 'agora';
+    if (m < 60) return m + 'min';
+    return Math.floor(m / 60) + 'h' + (m % 60 ? (m % 60) + 'm' : '');
+  }
+
+  function badgeHtml(st) {
+    if (st.state === 'working') {
+      const el = fmtElapsed(st.startTs);
+      return `<span class="b-work"><i></i><i></i><i></i></span>${el ? `<span class="el">${el}</span>` : ''}`;
+    }
+    if (st.state === 'waiting') {
+      const el = fmtElapsed(st.startTs);
+      return `<span class="b-wait">?</span>${el ? `<span class="el">${el}</span>` : ''}`;
+    }
+    return '<span class="b-done">✓</span>';
+  }
+
+  function subFor(st) {
+    if (!st) return '';
+    if (st.state === 'done') return st.summary || '';
+    if (st.state === 'waiting') return st.detail ? '❓ ' + st.detail : '';
+    return st.detail || '';
+  }
+
+  function openStatus(s) {
+    if (s.state === 'done') window.api.ackSession(s.sessionId);
+    window.api.openProject(s.cwd);
+  }
+
+  function header(label, color, count) {
+    const h = document.createElement('div');
+    h.className = 'cat-header';
+    h.innerHTML =
+      `<div class="cdot" style="background:${color}"></div>${esc(label)}` +
+      (count ? `&nbsp;<span class="hcount">· ${count}</span>` : '');
+    list.appendChild(h);
+  }
+
+  function makeRow(opts) {
+    const st = opts.status || null;
+    const el = document.createElement('div');
+    el.className = 'item' + (st ? (st.state === 'done' ? ' cc-done' : ' cc-active') : '');
+    el.title = opts.path;
+    const g = gitInfo[opts.path];
+    const isFav = config.favorites.includes(opts.path);
+    const open = isOpenInVSCode(opts.name);
+    const prN = prInfo[(opts.name || '').toLowerCase()];
+    const branchHtml = g && g.branch ? `<span class="branch">${esc(g.branch)}</span>` : '';
+    const prHtml = prN ? `<span class="prb">${prN} PR${prN > 1 ? 's' : ''}</span>` : '';
+    const dirtyHtml = g && g.dirty ? '<i class="dirty" title="mudanças não commitadas"></i>' : '';
+    const openHtml = open ? '<i class="vsopen" title="aberto no VS Code"></i>' : '';
+    const sub = opts.sub != null ? opts.sub : subFor(st);
+    const subHtml = sub ? `<div class="sub" title="${esc(sub)}">${esc(sub)}</div>` : '';
+    const right = st
+      ? `<div class="badge">${badgeHtml(st)}</div>`
+      : `<div class="hint">${open ? 'focar' : 'abrir'}</div>`;
+    el.innerHTML =
+      `<div class="cdot" style="background:${opts.color}"></div>` +
+      `<div class="col"><div class="nrow"><span class="name">${esc(opts.name)}</span>${openHtml}${branchHtml}${prHtml}${dirtyHtml}</div>${subHtml}</div>` +
+      `<button class="star${isFav ? ' on' : ''}" title="${isFav ? 'remover dos favoritos' : 'adicionar aos favoritos'}">${isFav ? '★' : '☆'}</button>` +
+      right;
+    el.querySelector('.star').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      config = await window.api.toggleFavorite(opts.path);
+      render();
+    });
+    el.addEventListener('click', () => (st ? openStatus(st) : window.api.openProject(opts.path)));
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      window.api.itemMenu(opts.path);
+    });
+    list.appendChild(el);
+    visible.push({ el, path: opts.path, status: st });
+  }
+
+  function actionRow(label, fn) {
+    const el = document.createElement('div');
+    el.className = 'item action';
+    el.innerHTML =
+      `<div class="cdot" style="background:#7c5cff"></div>` +
+      `<div class="col"><div class="nrow"><span class="name">${esc(label)}</span></div></div>` +
+      `<div class="hint">Enter</div>`;
+    el.addEventListener('click', fn);
+    list.appendChild(el);
+    visible.push({ el, action: fn });
+  }
+
+  function render() {
+    const raw = search.value.trim();
+    const q = raw.toLowerCase();
+    const isUrl = /^(https?:\/\/|git@)/i.test(raw);
+    const match = (name) => !q || name.toLowerCase().includes(q);
+    list.innerHTML = '';
+    visible = [];
+    selIdx = -1;
+    const shown = new Set();
+
+    // --- Clonar repositório (URL colada na busca) ---
+    if (isUrl) {
+      header('Clonar repositório', '#3ddc97');
+      categories.forEach((cat) => {
+        actionRow(`⬇  Clonar em ${cat.name}`, async () => {
+          window.api.setMode(false);
+          await window.api.cloneRepo({ url: raw, category: cat.name });
+        });
+      });
+      empty.style.display = 'none';
+      if (visible.length) select(0);
+      return;
+    }
+
+    // --- Claude Code ---
+    const cc = statuses.filter((s) => match(displayNameFor(s.cwd)));
+    const totalToday = Object.values(todayStats).reduce((a, b) => a + b, 0);
+    if (cc.length) {
+      header('Claude Code', CC_COLOR, totalToday ? `${totalToday} hoje` : '');
+      cc.forEach((s) => {
+        makeRow({
+          name: displayNameFor(s.cwd),
+          path: s.cwd,
+          color: CC_COLOR,
+          status: s,
+        });
+        shown.add((s.cwd || '').toLowerCase());
+      });
+    }
+
+    // --- Abertos no VS Code ---
+    const openProjects = [];
+    for (const cat of categories) {
+      for (const p of cat.projects) {
+        if (isOpenInVSCode(p.name) && !shown.has(p.path.toLowerCase())) openProjects.push(p);
+      }
+    }
+    const openMatched = openProjects.filter((p) => match(p.name));
+    if (openMatched.length) {
+      header('Abertos no VS Code', '#3fb6ff');
+      openMatched.forEach((p) => {
+        makeRow({ name: p.name, path: p.path, color: colorFor(p.path), status: statusForPath(p.path) });
+        shown.add(p.path.toLowerCase());
+      });
+    }
+
+    // --- Favoritos ---
+    const favs = config.favorites
+      .map((p, i) => ({ path: p, idx: i, name: (projectByPath(p) || {}).name || basename(p) }))
+      .filter((f) => match(f.name));
+    if (favs.length) {
+      header('Favoritos', '#ffd76a');
+      favs.forEach((f) => {
+        makeRow({
+          name: f.name,
+          path: f.path,
+          color: colorFor(f.path),
+          status: statusForPath(f.path),
+          sub: f.idx < 9 ? `Ctrl+Alt+${f.idx + 1}` : null,
+        });
+        shown.add(f.path.toLowerCase());
+      });
+    }
+
+    // --- Recentes ---
+    const recs = (config.recents || [])
+      .filter((r) => !shown.has(r.path.toLowerCase()))
+      .map((r) => ({ path: r.path, name: (projectByPath(r.path) || {}).name || basename(r.path) }))
+      .filter((r) => match(r.name))
+      .slice(0, 5);
+    if (recs.length && !q) {
+      header('Recentes', '#9a9ab0');
+      recs.forEach((r) => {
+        makeRow({ name: r.name, path: r.path, color: colorFor(r.path), status: statusForPath(r.path) });
+      });
+    }
+
+    // --- Categorias ---
+    categories.forEach((cat, ci) => {
+      const color = COLORS[ci % COLORS.length];
+      const items = cat.projects.length
+        ? cat.projects
+        : [{ name: cat.name + ' (pasta)', path: cat.path }];
+      const matched = items.filter((p) => match(p.name) || (!q ? false : cat.name.toLowerCase().includes(q)));
+      if (!matched.length) return;
+      header(cat.name, color);
+      matched.forEach((p) => {
+        makeRow({ name: p.name, path: p.path, color, status: statusForPath(p.path) });
+      });
+    });
+
+    // --- Criar projeto (busca sem resultado) ---
+    if (!visible.length && q.length > 1) {
+      header('Criar projeto', '#7c5cff');
+      categories.forEach((cat) => {
+        actionRow(`➕  Criar "${raw}" em ${cat.name}`, async () => {
+          window.api.setMode(false);
+          await window.api.createProject({ category: cat.name, name: raw });
+        });
+      });
+    }
+
+    empty.style.display = visible.length ? 'none' : 'block';
+    if (q && visible.length) select(0);
+  }
+
+  function select(i) {
+    if (selIdx >= 0 && visible[selIdx]) visible[selIdx].el.classList.remove('sel');
+    selIdx = i;
+    if (selIdx >= 0 && visible[selIdx]) {
+      visible[selIdx].el.classList.add('sel');
+      visible[selIdx].el.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function updatePill() {
+    const working = statuses.filter((s) => s.state === 'working').length;
+    const waiting = statuses.filter((s) => s.state === 'waiting').length;
+    const done = statuses.filter((s) => s.state === 'done').length;
+
+    // mini-status: uma única sessão ativa mostra o nome do projeto na pílula
+    const active = statuses.filter((s) => s.state === 'working' || s.state === 'waiting');
+    pillLabel.textContent =
+      statuses.length === 1 && active.length === 1 ? displayNameFor(statuses[0].cwd) : 'Projetos';
+
+    let html = '';
+    if (working) html += `<span class="b-work"><i></i><i></i><i></i></span>${working > 1 ? `<span class="cnt o">${working}</span>` : ''}`;
+    if (waiting) html += `<span class="b-wait">?${waiting > 1 ? waiting : ''}</span>`;
+    if (done) html += `<span class="b-done">✓${done > 1 ? done : ''}</span>`;
+    pillStatus.innerHTML = html;
+  }
+
+  // ---------- som ----------
+  function chime(type) {
+    if (config.settings && config.settings.sounds === false) return;
+    try {
+      const ctx = chime.ctx || (chime.ctx = new AudioContext());
+      const t = ctx.currentTime;
+      const tones = type === 'done' ? [[659.25, 0], [783.99, 0.13]] : [[493.88, 0]];
+      for (const [f, off] of tones) {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = f;
+        g.gain.setValueAtTime(0, t + off);
+        g.gain.linearRampToValueAtTime(0.1, t + off + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, t + off + 0.5);
+        o.connect(g);
+        g.connect(ctx.destination);
+        o.start(t + off);
+        o.stop(t + off + 0.6);
+      }
+    } catch {}
+  }
+
+  // ---------- settings ----------
+  async function syncSettingsUI() {
+    const s = config.settings || {};
+    document.getElementById('set-sounds').checked = s.sounds !== false;
+    document.getElementById('set-toast').value = String(s.toastMs || 4000);
+    const sel = document.getElementById('set-display');
+    if (!sel.dataset.loaded) {
+      const displays = await window.api.getDisplays();
+      sel.innerHTML = displays
+        .map((d) => `<option value="${d.id}">${esc(d.label)}</option>`)
+        .join('');
+      sel.dataset.loaded = '1';
+    }
+    if (s.displayId != null) sel.value = String(s.displayId);
+  }
+
+  gear.addEventListener('click', () => {
+    settingsEl.classList.toggle('show');
+    gear.classList.toggle('on', settingsEl.classList.contains('show'));
+  });
+  document.getElementById('set-sounds').addEventListener('change', async (e) => {
+    config = await window.api.setSetting({ sounds: e.target.checked });
+  });
+  document.getElementById('set-toast').addEventListener('change', async (e) => {
+    config = await window.api.setSetting({ toastMs: parseInt(e.target.value, 10) });
+  });
+  document.getElementById('set-display').addEventListener('change', async (e) => {
+    config = await window.api.setSetting({ displayId: parseInt(e.target.value, 10) });
+  });
+
+  pill.addEventListener('click', () => window.api.setMode(true));
+
+  toastEl.addEventListener('click', () => {
+    if (!toastData) return;
+    window.api.ackSession(toastData.sessionId);
+    window.api.openProject(toastData.cwd);
+  });
+
+  search.addEventListener('input', render);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { window.api.setMode(false); return; }
+    if (!visible.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); select(Math.min(selIdx + 1, visible.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); select(Math.max(selIdx - 1, 0)); }
+    else if (e.key === 'Enter' && selIdx >= 0) {
+      const v = visible[selIdx];
+      if (v.action) v.action();
+      else if (v.status) openStatus(v.status);
+      else window.api.openProject(v.path);
+    }
+  });
+
+  window.api.onMode((expanded) => {
+    document.body.classList.toggle('expanded', expanded);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => document.body.classList.toggle('in', expanded))
+    );
+    if (expanded) {
+      search.value = '';
+      settingsEl.classList.remove('show');
+      gear.classList.remove('on');
+      render();
+      search.focus();
+      load(); // re-escaneia em segundo plano a cada abertura
+    }
+  });
+
+  window.api.onRefresh(load);
+
+  window.api.onClaudeStatus((s) => {
+    statuses = s;
+    updatePill();
+    if (document.body.classList.contains('expanded')) render();
+  });
+
+  window.api.onGitStatus((g) => {
+    Object.assign(gitInfo, g);
+    if (document.body.classList.contains('expanded')) render();
+  });
+
+  window.api.onConfig((c) => {
+    config = c;
+    if (document.body.classList.contains('expanded')) render();
+  });
+
+  window.api.onVscodeOpen((v) => {
+    vscodeOpen = v;
+    if (document.body.classList.contains('expanded')) render();
+  });
+
+  window.api.onPrStatus((p) => {
+    prInfo = p;
+    if (document.body.classList.contains('expanded')) render();
+  });
+
+  window.api.onStats((s) => {
+    todayStats = s;
+    if (document.body.classList.contains('expanded')) render();
+  });
+
+  window.api.onChime(chime);
+
+  window.api.onToast((t) => {
+    toastData = t;
+    document.body.classList.toggle('toasting', !!t);
+    if (t) document.getElementById('toast-name').textContent = t.name;
+  });
+
+  // tempos decorridos ("12min") atualizam sozinhos
+  setInterval(() => {
+    if (document.body.classList.contains('expanded')) render();
+    updatePill();
+  }, 30000);
+
+  load();
+</script>
+</body>
+</html>

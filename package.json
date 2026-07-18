@@ -1,0 +1,34 @@
+{
+  "name": "dynamic-island-projects",
+  "version": "1.0.0",
+  "description": "Dynamic Island Projects — a ilha dinâmica dos seus projetos no Windows",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "icon": "node scripts/make-icon.js && node scripts/make-ico.js",
+    "dist": "electron-builder --win dir"
+  },
+  "build": {
+    "appId": "com.matheus.dynamicislandprojects",
+    "productName": "Dynamic Island Projects",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "dir",
+      "icon": "assets/icon.ico"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "assets/**",
+      "scripts/fullscreen-watch.ps1",
+      "hooks/**"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^43.1.1",
+    "electron-builder": "^26.15.3"
+  }
+}
