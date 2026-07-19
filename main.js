@@ -13,7 +13,6 @@ const DATA_DIR = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'notch-bar')
 const STATUS_DIR = path.join(DATA_DIR, 'status');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
-const JOURNAL_FILE = path.join(DATA_DIR, 'journal.jsonl');
 const STATUS_STALE_MS = 12 * 60 * 60 * 1000;
 const GIT_CACHE_MS = 60 * 1000;
 
@@ -85,32 +84,6 @@ function fmtDur(ms) {
   if (m < 1) return null;
   if (m < 60) return `${m}min`;
   return `${Math.floor(m / 60)}h${m % 60 ? (m % 60) + 'm' : ''}`;
-}
-
-function appendJournal(entry) {
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.appendFileSync(JOURNAL_FILE, JSON.stringify(entry) + '\n');
-  } catch {}
-}
-
-function readJournal(limit = 200) {
-  try {
-    const lines = fs.readFileSync(JOURNAL_FILE, 'utf8').trim().split('\n');
-    // mantém o arquivo enxuto
-    if (lines.length > 800) {
-      fs.writeFileSync(JOURNAL_FILE, lines.slice(-500).join('\n') + '\n');
-    }
-    const out = [];
-    for (const l of lines.slice(-limit)) {
-      try {
-        out.push(JSON.parse(l));
-      } catch {}
-    }
-    return out;
-  } catch {
-    return [];
-  }
 }
 
 function bumpStat(name) {
@@ -316,14 +289,6 @@ function handleStatusChanges(statuses) {
           notifyStatus(s);
           showToast(s);
           bumpStat(projectNameFor(s.cwd));
-          appendJournal({
-            ts: Date.now(),
-            name: projectNameFor(s.cwd),
-            cwd: s.cwd,
-            summary: s.summary || '',
-            durMs: s.startTs ? Date.now() - s.startTs : 0,
-          });
-          send('journal-updated', null);
           if (config.settings.sounds !== false) send('chime', 'done');
         } else if (s.state === 'waiting') {
           notifyStatus(s);
@@ -700,7 +665,6 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('create-project', (_e, { category, name }) => createProject(category, name));
   ipcMain.handle('clone-repo', (_e, { url, category }) => cloneRepo(url, category));
-  ipcMain.handle('get-journal', () => readJournal());
   ipcMain.on('set-peek', (_e, opts) => {
     if (expanded || !win) return;
     const on = !!(opts && opts.on);

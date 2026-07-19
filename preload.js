@@ -8,7 +8,6 @@ contextBridge.exposeInMainWorld('api', {
   getVscodeOpen: () => ipcRenderer.invoke('get-vscode-open'),
   getPrStatus: () => ipcRenderer.invoke('get-pr-status'),
   getDisplays: () => ipcRenderer.invoke('get-displays'),
-  getJournal: () => ipcRenderer.invoke('get-journal'),
   setPeek: (opts) => ipcRenderer.send('set-peek', opts),
   setSetting: (kv) => ipcRenderer.invoke('set-setting', kv),
   toggleFavorite: (p) => ipcRenderer.invoke('toggle-favorite', p),
@@ -29,5 +28,4 @@ contextBridge.exposeInMainWorld('api', {
   onStats: (cb) => ipcRenderer.on('stats', (_e, v) => cb(v)),
   onChime: (cb) => ipcRenderer.on('chime', (_e, v) => cb(v)),
   onPeek: (cb) => ipcRenderer.on('peek', (_e, v) => cb(v)),
-  onJournalUpdated: (cb) => ipcRenderer.on('journal-updated', () => cb()),
 });
