@@ -82,6 +82,24 @@ npx electron-builder --win dir
 
 Para iniciar com o Windows: botão direito no ícone da bandeja → "Iniciar com o Windows".
 
+## 🔄 Atualizar
+
+Já instalado? Para pegar a última versão, abra o Claude Code na pasta do projeto e digite:
+
+```
+/update
+```
+
+O Claude faz `git pull`, resume o que mudou, reinstala dependências se necessário, rebuilda o executável e reinicia a ilha automaticamente.
+
+Ou manualmente:
+
+```bash
+git pull
+npm install                      # se o package.json mudou
+npx electron-builder --win dir   # rebuilda o executável
+```
+
 ## 🔌 Hooks do Claude Code
 
 O status das sessões vem de hooks globais do Claude Code. Adicione ao seu `~/.claude/settings.json` (ajuste o caminho):
