@@ -40,7 +40,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // ---------- config / stats ----------
-const DEFAULT_SETTINGS = { sounds: true, toastMs: 4000, displayId: null };
+const DEFAULT_SETTINGS = { sounds: true, toastMs: 4000, displayId: null, theme: 'roxo' };
 
 function loadConfig() {
   try {
@@ -582,6 +582,8 @@ function createWindow() {
     },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
+  // no Windows o botão da taskbar reaparece a cada show()/showInactive()
+  win.on('show', () => win.setSkipTaskbar(true));
   win.loadFile('index.html');
 
   win.on('blur', () => {

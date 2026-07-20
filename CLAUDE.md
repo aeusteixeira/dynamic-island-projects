@@ -27,7 +27,8 @@ scripts/fullscreen-watch.ps1# watcher de tela cheia (spawnado pelo main, imprime
 - **Abertos no VS Code**: `tasklist /v` filtrando `Code.exe`; o nome da pasta é o penúltimo segmento do título da janela.
 - **Git**: branch lida direto de `.git/HEAD` (rápido); dirty via `git status --porcelain` com cache de 60s e 4 workers.
 - **PRs**: `gh search prs --author "@me" --state open` a cada 5min; falha silenciosa se `gh` não existir.
-- **Config do usuário**: `%LOCALAPPDATA%\notch-bar\config.json` (favoritos, recentes, settings: sons/toastMs/displayId).
+- **Config do usuário**: `%LOCALAPPDATA%\notch-bar\config.json` (favoritos, recentes, settings: sons/toastMs/displayId/theme).
+- **Tema**: a paleta vive em `:root` no `index.html`; cada tema é um bloco `html[data-theme="..."]` que só sobrescreve o que muda. O JS lê as cores de categoria do `:root` via `cssVar()` — ao trocar de tema é preciso chamar `refreshPaletteCache()`.
 
 ## Comandos
 
