@@ -268,6 +268,67 @@
   }
   #gear:hover, #gear.on { color: var(--text-soft); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 
+  /* ---------- posição livre: a gota se adapta à borda onde está ----------
+     padrão (sem classe / dock-top) = gota colada no topo, como sempre foi.  */
+  body.dock-bottom { align-items: flex-end; }
+  body.dock-free { align-items: center; }
+  body.dock-left { justify-content: flex-start; }
+  body.dock-right { justify-content: flex-end; }
+  body.dragging, body.dragging * { cursor: grabbing !important; }
+
+  /* colada embaixo: a gota vira de cabeça pra baixo */
+  body.dock-bottom #pill, body.dock-bottom #toast,
+  body.dock-bottom #peek, body.dock-bottom #panel {
+    border-top: 1px solid rgba(255, 255, 255, 0.09);
+    border-bottom: none;
+    transform-origin: 50% 100%;
+  }
+  body.dock-bottom #pill, body.dock-bottom #toast { border-radius: 19px 19px 0 0; }
+  body.dock-bottom #peek { border-radius: 20px 20px 0 0; }
+  body.dock-bottom #panel, body.dock-bottom #panel-clip { border-radius: 24px 24px 0 0; }
+  body.dock-bottom .fillet { top: auto; bottom: 0; }
+  body.dock-bottom #pill .fillet.l { background: radial-gradient(circle at 0 0, rgba(0, 0, 0, 0) 11.5px, var(--bg-pill) 12px); }
+  body.dock-bottom #pill .fillet.r { background: radial-gradient(circle at 100% 0, rgba(0, 0, 0, 0) 11.5px, var(--bg-pill) 12px); }
+  body.dock-bottom #toast .fillet.l { background: radial-gradient(circle at 0 0, rgba(0, 0, 0, 0) 11.5px, var(--bg-toast) 12px); }
+  body.dock-bottom #toast .fillet.r { background: radial-gradient(circle at 100% 0, rgba(0, 0, 0, 0) 11.5px, var(--bg-toast) 12px); }
+  body.dock-bottom #peek .fillet.l { background: radial-gradient(circle at 0 0, rgba(0, 0, 0, 0) 11.5px, var(--bg-peek) 12px); }
+  body.dock-bottom #peek .fillet.r { background: radial-gradient(circle at 100% 0, rgba(0, 0, 0, 0) 11.5px, var(--bg-peek) 12px); }
+  body.dock-bottom #panel .fillet.l { background: radial-gradient(circle at 0 0, rgba(0, 0, 0, 0) 13.5px, var(--bg-panel) 14px); }
+  body.dock-bottom #panel .fillet.r { background: radial-gradient(circle at 100% 0, rgba(0, 0, 0, 0) 13.5px, var(--bg-panel) 14px); }
+
+  /* solta no meio da tela: vira pílula flutuante, sem os fillets do notch */
+  body.dock-free #pill, body.dock-free #toast,
+  body.dock-free #peek, body.dock-free #panel {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transform-origin: 50% 50%;
+  }
+  body.dock-free #pill, body.dock-free #toast { border-radius: 19px; }
+  body.dock-free #peek { border-radius: 18px; }
+  body.dock-free #panel, body.dock-free #panel-clip { border-radius: 20px; }
+  body.dock-free #toast { border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+  body.dock-free .fillet { display: none; }
+
+  /* encostada na lateral: some o fillet que ficaria fora da tela */
+  body.dock-left .fillet.l, body.dock-right .fillet.r { display: none; }
+
+  /* colada só numa lateral (livre no eixo Y): achata o lado grudado na borda */
+  body.dock-free.dock-left #pill, body.dock-free.dock-left #toast { border-radius: 0 19px 19px 0; }
+  body.dock-free.dock-left #peek { border-radius: 0 18px 18px 0; }
+  body.dock-free.dock-left #panel, body.dock-free.dock-left #panel-clip { border-radius: 0 20px 20px 0; }
+  body.dock-free.dock-left #pill, body.dock-free.dock-left #toast,
+  body.dock-free.dock-left #peek, body.dock-free.dock-left #panel {
+    border-left: none;
+    transform-origin: 0 50%;
+  }
+  body.dock-free.dock-right #pill, body.dock-free.dock-right #toast { border-radius: 19px 0 0 19px; }
+  body.dock-free.dock-right #peek { border-radius: 18px 0 0 18px; }
+  body.dock-free.dock-right #panel, body.dock-free.dock-right #panel-clip { border-radius: 20px 0 0 20px; }
+  body.dock-free.dock-right #pill, body.dock-free.dock-right #toast,
+  body.dock-free.dock-right #peek, body.dock-free.dock-right #panel {
+    border-right: none;
+    transform-origin: 100% 50%;
+  }
+
   /* ---------- settings ---------- */
   #settings {
     display: none;
@@ -290,6 +351,17 @@
     outline: none;
   }
   .set-row select option { background: #1a1a22; }
+  .set-btn {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    color: #ddd;
+    font-size: 12px;
+    font-family: inherit;
+    padding: 4px 10px;
+    cursor: pointer;
+  }
+  .set-btn:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); color: #fff; }
   .switch { position: relative; width: 36px; height: 20px; flex: none; cursor: pointer; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .switch .sl {
@@ -405,7 +477,7 @@
 </style>
 </head>
 <body>
-  <div id="pill" title="Abrir projetos (Ctrl+Alt+P)">
+  <div id="pill" title="Abrir projetos (Ctrl+Alt+P) · arraste para mover a ilha">
     <i class="fillet l"></i><i class="fillet r"></i>
     <div class="dot"></div>
     <span id="pill-label">Projetos</span>
@@ -460,6 +532,13 @@
             <option value="rosa">Rosa</option>
             <option value="grafite">Grafite</option>
           </select>
+        </div>
+        <div class="set-row">
+          <span>Posição da ilha</span>
+          <button id="set-pos-reset" class="set-btn">Centralizar no topo</button>
+        </div>
+        <div class="set-row" style="color:#6f6f7e; font-size:11px;">
+          <span>Arraste a gota (ou a barra do painel) para mover a ilha pela tela</span>
         </div>
         <div class="set-row" style="color:#6f6f7e; font-size:11px;">
           <span>Atalhos: Ctrl+Alt+P abre · Ctrl+Alt+1..9 abrem favoritos</span>
@@ -884,18 +963,20 @@
   document.getElementById('set-display').addEventListener('change', async (e) => {
     config = await window.api.setSetting({ displayId: parseInt(e.target.value, 10) });
   });
+  document.getElementById('set-pos-reset').addEventListener('click', () => window.api.resetPos());
   document.getElementById('set-theme').addEventListener('change', async (e) => {
     applyTheme(e.target.value);
     config = await window.api.setSetting({ theme: e.target.value });
   });
 
   pill.addEventListener('click', () => {
+    if (dragging) return;
     clearTimeout(peekTimer);
     window.api.setMode(true);
   });
 
   toastEl.addEventListener('click', () => {
-    if (!toastData) return;
+    if (dragging || !toastData) return;
     window.api.ackSession(toastData.sessionId);
     window.api.openProject(toastData.cwd);
   });
@@ -934,7 +1015,7 @@
   peekEl.addEventListener('mouseleave', () => window.api.setPeek({ on: false }));
   // clicar em qualquer área vazia do peek (ou no "Abrir projetos") expande o painel
   peekEl.addEventListener('click', (e) => {
-    if (e.target.closest('.item')) return;
+    if (dragging || e.target.closest('.item')) return;
     clearTimeout(peekTimer);
     window.api.setPeek({ on: false });
     window.api.setMode(true);
@@ -942,6 +1023,55 @@
   window.api.onPeek((v) => {
     document.body.classList.toggle('peeking', !!v);
     if (v) renderPeek();
+  });
+
+  // ---------- arrastar a ilha ----------
+  // o main é quem move a janela (lendo o cursor); aqui só detectamos a intenção.
+  // depois que a janela começa a seguir o cursor não chegam mais mousemove —
+  // por isso o pointer capture, que garante o pointerup pra encerrar o arraste.
+  let dragging = false;
+
+  function makeDraggable(el, ignore) {
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.pointerType !== 'mouse') return;
+      if (ignore && e.target.closest(ignore)) return;
+      const sx = e.screenX;
+      const sy = e.screenY;
+      let started = false;
+      const move = (ev) => {
+        if (started || Math.abs(ev.screenX - sx) + Math.abs(ev.screenY - sy) < 4) return;
+        started = true;
+        dragging = true;
+        clearTimeout(peekTimer);
+        document.body.classList.add('dragging');
+        window.api.dragStart();
+      };
+      const up = () => {
+        el.removeEventListener('pointermove', move);
+        el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
+        if (!started) return;
+        window.api.dragEnd();
+        document.body.classList.remove('dragging');
+        setTimeout(() => { dragging = false; }, 0); // o click desta soltada ainda é ignorado
+      };
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    });
+  }
+
+  makeDraggable(pill);
+  makeDraggable(toastEl);
+  makeDraggable(peekEl, '.item, #peek-open');
+  makeDraggable(document.getElementById('search-wrap'), '#search, #gear');
+  makeDraggable(document.getElementById('footer'));
+
+  window.api.onDock((d) => {
+    const b = document.body;
+    ['top', 'bottom', 'left', 'right', 'free'].forEach((k) => b.classList.remove('dock-' + k));
+    (d || 'top').split(' ').forEach((k) => b.classList.add('dock-' + k));
   });
 
   search.addEventListener('input', render);
@@ -989,6 +1119,7 @@
 
   window.api.onConfig((c) => {
     config = c;
+    syncSettingsUI();
     if (document.body.classList.contains('expanded')) render();
   });
 

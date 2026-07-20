@@ -27,7 +27,8 @@ scripts/fullscreen-watch.ps1# watcher de tela cheia (spawnado pelo main, imprime
 - **Abertos no VS Code**: `tasklist /v` filtrando `Code.exe`; o nome da pasta é o penúltimo segmento do título da janela.
 - **Git**: branch lida direto de `.git/HEAD` (rápido); dirty via `git status --porcelain` com cache de 60s e 4 workers.
 - **PRs**: `gh search prs --author "@me" --state open` a cada 5min; falha silenciosa se `gh` não existir.
-- **Config do usuário**: `%LOCALAPPDATA%\notch-bar\config.json` (favoritos, recentes, settings: sons/toastMs/displayId/theme).
+- **Config do usuário**: `%LOCALAPPDATA%\notch-bar\config.json` (favoritos, recentes, settings: sons/toastMs/displayId/theme/pos).
+- **Posição da ilha**: `settings.pos = { x, y, a }` — frações da área de trabalho do monitor; `x` = centro horizontal, `a` = de onde ela cresce (`top`/`bottom`/`center`) e `y` = essa borda de referência. `boundsFor()` converte isso + o tamanho atual em bounds; `sendDock()` avisa a UI em quais bordas encostou (classes `dock-top/bottom/left/right/free`), que trocam o formato da gota. O arraste roda no main lendo `screen.getCursorScreenPoint()` a 16ms — depois que a janela passa a seguir o cursor não chegam mais `mousemove` no renderer, que só detecta a intenção (4px) e usa pointer capture pra garantir o `pointerup`.
 - **Tema**: a paleta vive em `:root` no `index.html`; cada tema é um bloco `html[data-theme="..."]` que só sobrescreve o que muda. O JS lê as cores de categoria do `:root` via `cssVar()` — ao trocar de tema é preciso chamar `refreshPaletteCache()`.
 
 ## Comandos
@@ -45,6 +46,7 @@ npx electron-builder --win dir   # build → dist\win-unpacked\Dynamic Island Pr
 - **BOM**: arquivos de status com BOM são ignorados pelo `JSON.parse` do app. O PowerShell 5.1 (`Set-Content -Encoding utf8`) grava BOM — em testes manuais, usar `[System.IO.File]::WriteAllText` com `UTF8Encoding($false)`.
 - **Não usar `spawn` com `shell:true` + array de args** — gera DeprecationWarning (DEP0190) no Node 24+. Usar `exec` com a linha completa.
 - A UI é re-renderizada por completo em cada evento (`render()`); não há estado de DOM a preservar, exceto `search.value` e `selIdx`.
-- A janela transparente é redimensionada pelo main (`COLLAPSED`/`TOAST`/`EXPANDED` + `centerBounds`); o CSS anima o conteúdo, nunca a janela.
-- Os fillets (curvas côncavas da gota) são pseudo-elementos com `radial-gradient` cuja cor precisa bater com o background do elemento — se mudar a cor de fundo, mudar também nos fillets.
+- A janela transparente é redimensionada pelo main (`COLLAPSED`/`TOAST`/`EXPANDED` + `applyBounds`); o CSS anima o conteúdo, nunca a janela.
+- Os fillets (curvas côncavas da gota) são pseudo-elementos com `radial-gradient` cuja cor precisa bater com o background do elemento — se mudar a cor de fundo, mudar também nos fillets. Cada modo de encaixe (`body.dock-bottom`/`dock-free`) redefine esses gradientes.
+- **Screenshot não captura a janela** (transparente/layered): pra conferir posição, usar `GetWindowRect` via user32 no processo; pra conferir o CSS, abrir o `index.html` no Chrome e forçar as classes `dock-*`.
 - Textos da UI em pt-BR.

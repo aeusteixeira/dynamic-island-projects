@@ -40,13 +40,22 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // ---------- config / stats ----------
-const DEFAULT_SETTINGS = { sounds: true, toastMs: 4000, displayId: null, theme: 'roxo' };
+// pos = âncora da ilha em frações da área de trabalho do monitor.
+// x = centro horizontal; a = de onde ela cresce ('top' | 'bottom' | 'center');
+// y = a borda ancorada segundo `a` (topo, base ou centro vertical).
+const DEFAULT_POS = { x: 0.5, y: 0, a: 'top' };
+const DEFAULT_SETTINGS = { sounds: true, toastMs: 4000, displayId: null, theme: 'roxo', pos: { ...DEFAULT_POS } };
 
 function loadConfig() {
   try {
     config = { favorites: [], recents: [], settings: {}, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) };
   } catch {}
   config.settings = { ...DEFAULT_SETTINGS, ...(config.settings || {}) };
+  const p = config.settings.pos;
+  config.settings.pos =
+    p && Number.isFinite(p.x) && Number.isFinite(p.y)
+      ? { x: p.x, y: p.y, a: ['top', 'bottom', 'center'].includes(p.a) ? p.a : p.y < 0.5 ? 'top' : 'bottom' }
+      : { ...DEFAULT_POS };
 }
 
 function saveConfig() {
@@ -104,14 +113,119 @@ function targetDisplay() {
   return screen.getAllDisplays().find((d) => d.id === id) || screen.getPrimaryDisplay();
 }
 
-function centerBounds(size) {
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// converte a âncora salva + o tamanho atual em bounds reais, presos à área de trabalho
+function boundsFor(size) {
   const wa = targetDisplay().workArea;
+  const pos = config.settings.pos || DEFAULT_POS;
+  const width = Math.min(size.width, wa.width);
+  const height = Math.min(size.height, wa.height - 16);
+  const ax = wa.x + pos.x * wa.width;
+  const ay = wa.y + pos.y * wa.height;
+  // topo cresce pra baixo, base cresce pra cima, no meio/lateral cresce pros dois lados
+  const y = pos.a === 'bottom' ? ay - height : pos.a === 'center' ? ay - height / 2 : ay;
   return {
-    x: Math.round(wa.x + (wa.width - size.width) / 2),
-    y: wa.y,
-    width: size.width,
-    height: Math.min(size.height, wa.height - 16),
+    x: Math.round(clamp(ax - width / 2, wa.x, wa.x + wa.width - width)),
+    y: Math.round(clamp(y, wa.y, wa.y + wa.height - height)),
+    width,
+    height,
   };
+}
+
+// tamanho lógico atual da janela — o drag precisa dele pra reaplicar a âncora
+let curSize = COLLAPSED;
+
+function applyBounds(size) {
+  if (!win) return;
+  curSize = size;
+  win.setBounds(boundsFor(size));
+  sendDock();
+}
+
+// avisa a UI em quais bordas a ilha está encostada (muda o formato da gota)
+let lastDock = null;
+function sendDock() {
+  if (!win) return;
+  const b = win.getBounds();
+  // durante o arraste a janela pode estar em outro monitor que não o configurado
+  const wa = screen.getDisplayNearestPoint({ x: b.x + b.width / 2, y: b.y + b.height / 2 }).workArea;
+  const T = 2;
+  const d = [];
+  if (b.y - wa.y <= T) d.push('top');
+  if (wa.y + wa.height - (b.y + b.height) <= T) d.push('bottom');
+  if (b.x - wa.x <= T) d.push('left');
+  if (wa.x + wa.width - (b.x + b.width) <= T) d.push('right');
+  // sem borda horizontal (meio da tela ou só encostada numa lateral) = pílula flutuante
+  if (!d.includes('top') && !d.includes('bottom')) d.push('free');
+  const dock = d.join(' ');
+  if (dock === lastDock) return;
+  lastDock = dock;
+  send('dock', dock);
+}
+
+// ---------- arrastar a ilha ----------
+const SNAP = 16;
+let drag = null;
+
+function startDrag() {
+  if (!win || drag) return;
+  const b = win.getBounds();
+  const c = screen.getCursorScreenPoint();
+  drag = { dx: b.x - c.x, dy: b.y - c.y, w: b.width, h: b.height, timer: null };
+  drag.timer = setInterval(tickDrag, 16);
+}
+
+function tickDrag() {
+  if (!win || !drag) return;
+  const c = screen.getCursorScreenPoint();
+  const wa = screen.getDisplayNearestPoint(c).workArea;
+  let x = c.x + drag.dx;
+  let y = c.y + drag.dy;
+  // ímãs: bordas e centro horizontal
+  const cx = wa.x + (wa.width - drag.w) / 2;
+  if (Math.abs(x - cx) < SNAP) x = cx;
+  if (Math.abs(x - wa.x) < SNAP) x = wa.x;
+  if (Math.abs(x - (wa.x + wa.width - drag.w)) < SNAP) x = wa.x + wa.width - drag.w;
+  const cy = wa.y + (wa.height - drag.h) / 2;
+  if (Math.abs(y - cy) < SNAP) y = cy;
+  if (Math.abs(y - wa.y) < SNAP) y = wa.y;
+  if (Math.abs(y - (wa.y + wa.height - drag.h)) < SNAP) y = wa.y + wa.height - drag.h;
+  x = clamp(Math.round(x), wa.x, wa.x + wa.width - drag.w);
+  y = clamp(Math.round(y), wa.y, wa.y + wa.height - drag.h);
+  win.setBounds({ x, y, width: drag.w, height: drag.h });
+  sendDock();
+}
+
+function endDrag() {
+  if (!drag) return;
+  clearInterval(drag.timer);
+  drag = null;
+  if (!win) return;
+  const b = win.getBounds();
+  const disp = screen.getDisplayNearestPoint({ x: b.x + b.width / 2, y: b.y + b.height / 2 });
+  const wa = disp.workArea;
+  // encostou no topo/base → ancora naquela borda; senão (meio ou lateral) ancora pelo centro
+  const T = 2;
+  const a =
+    b.y - wa.y <= T ? 'top' : wa.y + wa.height - (b.y + b.height) <= T ? 'bottom' : 'center';
+  const ref = a === 'top' ? b.y : a === 'bottom' ? b.y + b.height : b.y + b.height / 2;
+  config.settings.displayId = disp.id;
+  config.settings.pos = {
+    x: clamp((b.x + b.width / 2 - wa.x) / wa.width, 0, 1),
+    y: clamp((ref - wa.y) / wa.height, 0, 1),
+    a,
+  };
+  saveConfig();
+  send('config', config);
+  applyBounds(curSize);
+}
+
+function resetPos() {
+  config.settings.pos = { ...DEFAULT_POS };
+  saveConfig();
+  send('config', config);
+  applyBounds(curSize);
 }
 
 function setExpanded(v) {
@@ -121,7 +235,7 @@ function setExpanded(v) {
   send('peek', false);
   clearTimeout(toastTimer);
   send('toast', null);
-  win.setBounds(centerBounds(v ? EXPANDED : COLLAPSED));
+  applyBounds(v ? EXPANDED : COLLAPSED);
   send('mode', v);
   if (v) {
     win.show();
@@ -250,7 +364,7 @@ function notifyStatus(s) {
 function showToast(s) {
   if (expanded || peeking || !win) return;
   clearTimeout(toastTimer);
-  win.setBounds(centerBounds(TOAST));
+  applyBounds(TOAST);
   send('toast', {
     name: projectNameFor(s.cwd),
     cwd: s.cwd,
@@ -259,7 +373,7 @@ function showToast(s) {
   });
   toastTimer = setTimeout(() => {
     send('toast', null);
-    if (!expanded) win.setBounds(centerBounds(COLLAPSED));
+    if (!expanded) applyBounds(COLLAPSED);
   }, config.settings.toastMs || 4000);
 }
 
@@ -565,7 +679,7 @@ function watchFullscreen() {
 // ---------- criação ----------
 function createWindow() {
   win = new BrowserWindow({
-    ...centerBounds(COLLAPSED),
+    ...boundsFor(COLLAPSED),
     frame: false,
     transparent: true,
     resizable: false,
@@ -585,13 +699,17 @@ function createWindow() {
   // no Windows o botão da taskbar reaparece a cada show()/showInactive()
   win.on('show', () => win.setSkipTaskbar(true));
   win.loadFile('index.html');
+  win.webContents.on('did-finish-load', () => {
+    lastDock = null;
+    sendDock();
+  });
 
   win.on('blur', () => {
     if (expanded) setExpanded(false);
   });
 
   screen.on('display-metrics-changed', () => {
-    win.setBounds(centerBounds(expanded ? EXPANDED : COLLAPSED));
+    applyBounds(expanded ? EXPANDED : COLLAPSED);
   });
 }
 
@@ -609,6 +727,7 @@ function createTray() {
   const menu = Menu.buildFromTemplate([
     { label: 'Abrir painel  (Ctrl+Alt+P)', click: () => setExpanded(true) },
     { label: 'Recarregar projetos', click: () => send('refresh') },
+    { label: 'Centralizar ilha no topo', click: () => resetPos() },
     { type: 'separator' },
     {
       label: 'Iniciar com o Windows',
@@ -654,7 +773,7 @@ app.whenReady().then(() => {
   ipcMain.handle('set-setting', (_e, kv) => {
     config.settings = { ...config.settings, ...kv };
     saveConfig();
-    if ('displayId' in kv) win.setBounds(centerBounds(expanded ? EXPANDED : COLLAPSED));
+    if ('displayId' in kv || 'pos' in kv) applyBounds(expanded ? EXPANDED : COLLAPSED);
     return config;
   });
   ipcMain.handle('toggle-favorite', (_e, p) => {
@@ -674,13 +793,16 @@ app.whenReady().then(() => {
     peeking = on;
     if (on) {
       const h = Math.min((opts && opts.height) || 200, 340);
-      win.setBounds(centerBounds({ width: 430, height: h }));
+      applyBounds({ width: 430, height: h });
       send('peek', true);
     } else {
       send('peek', false);
-      win.setBounds(centerBounds(COLLAPSED));
+      applyBounds(COLLAPSED);
     }
   });
+  ipcMain.on('drag-start', () => startDrag());
+  ipcMain.on('drag-end', () => endDrag());
+  ipcMain.on('reset-pos', () => resetPos());
   ipcMain.on('open-project', (_e, p) => openInVSCode(p));
   ipcMain.on('set-mode', (_e, v) => setExpanded(!!v));
   ipcMain.on('ack-session', (_e, id) => ackSession(id));
